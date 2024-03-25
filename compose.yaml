@@ -14,7 +14,7 @@ x-redash-environment: &redash-environment
   REDASH_REDIS_URL: "redis://redis:6379/0"
   REDASH_DATABASE_URL: "postgresql://postgres@postgres/postgres"
   REDASH_RATELIMIT_ENABLED: "false"
-  REDASH_MAIL_DEFAULT_SENDER: "redash@example.com"
+  REDASH_MAIL_DEFAULT_SENDER: "19951155847@126.com"
   REDASH_MAIL_SERVER: "email"
   REDASH_MAIL_PORT: 1025
   REDASH_ENFORCE_CSRF: "true"
@@ -28,8 +28,8 @@ services:
       - postgres
       - redis
     ports:
-      - "5001:5000"
-      - "5678:5678"
+      - "15001:5000"
+      - "15678:5678"
     environment:
       <<: *redash-environment
       PYTHONUNBUFFERED: 0
@@ -65,6 +65,6 @@ services:
   email:
     image: maildev/maildev
     ports:
-      - "1080:1080"
-      - "1025:1025"
+      - "11080:1080"
+      - "11025:1025"
     restart: unless-stopped

@@ -89,12 +89,12 @@ class PublicDashboardPage extends React.Component {
           <PublicDashboard dashboard={dashboard} />
         )}
         <div id="footer">
-          <div className="text-center">
-            <Link href="https://redash.io">
+	    <div className="text-center">
+            <Link href="https://www.zhuke.com">
               <img alt="Redash Logo" src={logoUrl} width="38" />
             </Link>
           </div>
-          Powered by <Link href="https://redash.io/?ref=public-dashboard">Redash</Link>
+          技术支持 <Link href="https://www.zhuke.com">筑客互联</Link>
         </div>
       </div>
     );
