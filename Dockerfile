@@ -1,6 +1,6 @@
-FROM node:18-bookworm as frontend-builder
+FROM node:24-bookworm AS frontend-builder
 
-RUN npm install --global --force yarn@1.22.19
+RUN npm install --global pnpm@10.30.3
 
 # Controls whether to build the frontend assets
 ARG skip_frontend_build
@@ -12,7 +12,7 @@ RUN useradd -m -d /frontend redash
 USER redash
 
 WORKDIR /frontend
-COPY --chown=redash package.json yarn.lock .yarnrc /frontend/
+COPY --chown=redash package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc /frontend/
 COPY --chown=redash viz-lib /frontend/viz-lib
 COPY --chown=redash scripts /frontend/scripts
 
@@ -20,13 +20,26 @@ COPY --chown=redash scripts /frontend/scripts
 ARG code_coverage
 ENV BABEL_ENV=${code_coverage:+test}
 
-RUN if [ "x$skip_frontend_build" = "x" ] ; then yarn --frozen-lockfile --network-concurrency 1; fi
+# Use BuildKit cache mount for pnpm store to speed rebuilds
+RUN --mount=type=cache,id=pnpm-store,target=/frontend/.cache/pnpm,uid=1001,gid=1001 \
+  pnpm config set store-dir /frontend/.cache/pnpm && \
+  if [ "x$skip_frontend_build" = "x" ] ; then pnpm install --frozen-lockfile; fi
 
 COPY --chown=redash client /frontend/client
 COPY --chown=redash webpack.config.js /frontend/
-RUN if [ "x$skip_frontend_build" = "x" ] ; then yarn build; else mkdir -p /frontend/client/dist && touch /frontend/client/dist/multi_org.html && touch /frontend/client/dist/index.html; fi
 
-FROM python:3.8-slim-bookworm
+# Use the same cache mount for the build step
+RUN --mount=type=cache,id=pnpm-store,target=/frontend/.cache/pnpm,uid=1001,gid=1001 <<EOF
+  if [ "x$skip_frontend_build" = "x" ]; then
+    pnpm run build
+  else
+    mkdir -p /frontend/client/dist
+    touch /frontend/client/dist/multi_org.html
+    touch /frontend/client/dist/index.html
+  fi
+EOF
+
+FROM python:3.13-slim-bookworm
 
 EXPOSE 5000
 
@@ -64,27 +77,33 @@ RUN apt-get update && \
 
 ARG TARGETPLATFORM
 ARG databricks_odbc_driver_url=https://databricks-bi-artifacts.s3.us-east-2.amazonaws.com/simbaspark-drivers/odbc/2.6.26/SimbaSparkODBC-2.6.26.1045-Debian-64bit.zip
-RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
-  curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \
-  && curl https://packages.microsoft.com/config/debian/12/prod.list > /etc/apt/sources.list.d/mssql-release.list \
-  && apt-get update \
-  && ACCEPT_EULA=Y apt-get install  -y --no-install-recommends msodbcsql17 \
-  && apt-get clean \
-  && rm -rf /var/lib/apt/lists/* \
-  && curl "$databricks_odbc_driver_url" --location --output /tmp/simba_odbc.zip \
-  && chmod 600 /tmp/simba_odbc.zip \
-  && unzip /tmp/simba_odbc.zip -d /tmp/simba \
-  && dpkg -i /tmp/simba/*.deb \
-  && printf "[Simba]\nDriver = /opt/simba/spark/lib/64/libsparkodbc_sb64.so" >> /etc/odbcinst.ini \
-  && rm /tmp/simba_odbc.zip \
-  && rm -rf /tmp/simba; fi
+RUN <<EOF
+  if [ "$TARGETPLATFORM" = "linux/amd64" ]; then
+    curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+    curl https://packages.microsoft.com/config/debian/12/prod.list > /etc/apt/sources.list.d/mssql-release.list
+    apt-get update
+    ACCEPT_EULA=Y apt-get install  -y --no-install-recommends msodbcsql18
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+    curl "$databricks_odbc_driver_url" --location --output /tmp/simba_odbc.zip
+    chmod 600 /tmp/simba_odbc.zip
+    unzip /tmp/simba_odbc.zip -d /tmp/simba
+    dpkg -i /tmp/simba/*.deb
+    printf "[Simba]\nDriver = /opt/simba/spark/lib/64/libsparkodbc_sb64.so" >> /etc/odbcinst.ini
+    rm /tmp/simba_odbc.zip
+    rm -rf /tmp/simba
+  fi
+EOF
 
 WORKDIR /app
 
-ENV POETRY_VERSION=1.6.1
+ENV POETRY_VERSION=2.1.4
 ENV POETRY_HOME=/etc/poetry
 ENV POETRY_VIRTUALENVS_CREATE=false
-RUN curl -sSL https://install.python-poetry.org | python3 -
+RUN curl -sSL --retry 3 --retry-delay 5 https://install.python-poetry.org | python3 -
+
+# Avoid crashes, including corrupted cache artifacts, when building multi-platform images with GitHub Actions.
+RUN /etc/poetry/bin/poetry cache clear pypi --all
 
 COPY pyproject.toml poetry.lock ./
 

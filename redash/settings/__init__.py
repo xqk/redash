@@ -50,6 +50,7 @@ QUERY_RESULTS_EXPIRED_TTL_ENABLED = parse_boolean(os.environ.get("REDASH_QUERY_R
 QUERY_RESULTS_EXPIRED_TTL = int(os.environ.get("REDASH_QUERY_RESULTS_EXPIRED_TTL", "86400"))
 
 SCHEMAS_REFRESH_SCHEDULE = int(os.environ.get("REDASH_SCHEMAS_REFRESH_SCHEDULE", 30))
+SCHEMAS_REFRESH_TIMEOUT = int(os.environ.get("REDASH_SCHEMAS_REFRESH_TIMEOUT", 300))
 
 AUTH_TYPE = os.environ.get("REDASH_AUTH_TYPE", "api_key")
 INVITATION_TOKEN_MAX_AGE = int(os.environ.get("REDASH_INVITATION_TOKEN_MAX_AGE", 60 * 60 * 24 * 7))
@@ -81,6 +82,7 @@ SESSION_COOKIE_SECURE = parse_boolean(os.environ.get("REDASH_SESSION_COOKIE_SECU
 # Whether the session cookie is set HttpOnly.
 SESSION_COOKIE_HTTPONLY = parse_boolean(os.environ.get("REDASH_SESSION_COOKIE_HTTPONLY", "true"))
 SESSION_EXPIRY_TIME = int(os.environ.get("REDASH_SESSION_EXPIRY_TIME", 60 * 60 * 6))
+SESSION_COOKIE_NAME = os.environ.get("REDASH_SESSION_COOKIE_NAME", "session")
 
 # Whether the session cookie is set to secure.
 REMEMBER_COOKIE_SECURE = parse_boolean(os.environ.get("REDASH_REMEMBER_COOKIE_SECURE") or str(COOKIES_SECURE))
@@ -133,6 +135,13 @@ REFERRER_POLICY = os.environ.get("REDASH_REFERRER_POLICY", "strict-origin-when-c
 FEATURE_POLICY = os.environ.get("REDASH_FEATURE_POLICY", "")
 
 MULTI_ORG = parse_boolean(os.environ.get("REDASH_MULTI_ORG", "false"))
+
+# If Redash is behind a proxy it might sometimes receive a X-Forwarded-Proto of HTTP
+# even if your actual Redash URL scheme is HTTPS. This will cause Flask to build
+# the OAuth redirect URL incorrectly thus failing auth. This is especially common if
+# you're behind a SSL/TCP configured AWS ELB or similar.
+# This setting will force the URL scheme.
+GOOGLE_OAUTH_SCHEME_OVERRIDE = os.environ.get("REDASH_GOOGLE_OAUTH_SCHEME_OVERRIDE", "")
 
 GOOGLE_CLIENT_ID = os.environ.get("REDASH_GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("REDASH_GOOGLE_CLIENT_SECRET", "")
@@ -312,7 +321,6 @@ default_query_runners = [
     "redash.query_runner.salesforce",
     "redash.query_runner.query_results",
     "redash.query_runner.prometheus",
-    "redash.query_runner.qubole",
     "redash.query_runner.db2",
     "redash.query_runner.druid",
     "redash.query_runner.kylin",
@@ -340,6 +348,8 @@ default_query_runners = [
     "redash.query_runner.oracle",
     "redash.query_runner.e6data",
     "redash.query_runner.risingwave",
+    "redash.query_runner.d1",
+    "redash.query_runner.duckdb",
 ]
 
 enabled_query_runners = array_from_string(
